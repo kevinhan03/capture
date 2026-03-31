@@ -50,6 +50,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [dbLoading, setDbLoading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const supabase = createClient();
@@ -748,11 +749,13 @@ export default function Home() {
               <img
                 src={selectedCapture.preview}
                 alt="capture detail"
+                onClick={() => setLightboxUrl(selectedCapture.preview)}
                 style={{
-                  width: "70%",
+                  width: "56%",
                   display: "block",
                   margin: "0 auto 18px",
                   borderRadius: 20,
+                  cursor: "zoom-in",
                 }}
               />
 
@@ -1006,6 +1009,33 @@ export default function Home() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.9)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 300,
+            padding: 20,
+          }}
+        >
+          <img
+            src={lightboxUrl}
+            alt="fullscreen"
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              borderRadius: 16,
+              objectFit: "contain",
+            }}
+          />
         </div>
       )}
     </div>
