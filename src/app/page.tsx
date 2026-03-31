@@ -699,7 +699,7 @@ export default function Home() {
             style={{
               width: "100%",
               maxWidth: 480,
-              maxHeight: "80vh",
+              maxHeight: "96vh",
               overflowY: "auto",
               backgroundColor: "#16161E",
               borderRadius: 24,
