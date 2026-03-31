@@ -167,24 +167,41 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
     <div
       style={{
         position: "fixed",
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        height: "100dvh",
         backgroundColor: "#16161E",
         display: "flex",
         flexDirection: "column",
         maxWidth: 480,
         margin: "0 auto",
         zIndex: 100,
+        overflow: "hidden",
       }}
     >
+      <style>{`
+        .crop-header { display: flex; align-items: center; padding: 16px 20px; gap: 12px; flex-shrink: 0; }
+        .crop-subtitle { text-align: center; padding: 0 20px; color: #888888; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0; }
+        .crop-btn-area { flex-shrink: 0; padding: 0 20px max(24px, env(safe-area-inset-bottom)); }
+        .crop-btn-area button { width: 100%; padding: 15px 0; border-radius: 14px; background-color: #2D2D3A; border: none; color: #00D4AA; font-size: 15px; font-weight: 600; cursor: pointer; }
+
+        @media (max-height: 700px) {
+          .crop-header { padding: 10px 20px; }
+          .crop-subtitle { padding: 0 20px; font-size: 12px; }
+          .crop-btn-area { padding: 0 20px max(16px, env(safe-area-inset-bottom)); }
+          .crop-btn-area button { padding: 12px 0; font-size: 14px; }
+        }
+        @media (max-height: 580px) {
+          .crop-header { padding: 8px 20px; }
+          .crop-subtitle { padding: 0 20px; font-size: 11px; }
+          .crop-btn-area { padding: 0 20px max(10px, env(safe-area-inset-bottom)); }
+          .crop-btn-area button { padding: 10px 0; font-size: 13px; border-radius: 12px; }
+        }
+      `}</style>
+
       {/* 헤더 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          padding: "16px 20px",
-          gap: 12,
-        }}
-      >
+      <div className="crop-header">
         <button
           onClick={onBack}
           style={{
@@ -210,18 +227,8 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
       </div>
 
       {/* 서브타이틀 */}
-      <div
-        style={{
-          textAlign: "center",
-          padding: "0 20px 16px",
-          color: "#888888",
-          fontSize: 13,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-        }}
-      >
+      <div className="crop-subtitle">
+
         <span style={{ fontSize: 14 }}>⊡</span>
         <span>분석할 영역을 조절하세요.</span>
       </div>
@@ -230,8 +237,9 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
       <div
         style={{
           flex: 1,
+          minHeight: 0,
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "center",
           userSelect: "none",
           touchAction: "none",
@@ -246,8 +254,8 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
         <div
           ref={containerRef}
           style={{
-            width: "80%",
-            height: "80%",
+            width: "64%",
+            height: "100%",
             position: "relative",
             overflow: "visible",
           }}
@@ -399,27 +407,8 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
       </div>
 
       {/* 하단 버튼 */}
-      <div
-        style={{
-          padding: "20px 20px 36px",
-        }}
-      >
-        <button
-          onClick={handleComplete}
-          style={{
-            width: "100%",
-            padding: "15px 0",
-            borderRadius: 14,
-            backgroundColor: "#2D2D3A",
-            border: "none",
-            color: "#00D4AA",
-            fontSize: 15,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          분석하기
-        </button>
+      <div className="crop-btn-area">
+        <button onClick={handleComplete}>분석하기</button>
       </div>
     </div>
   );
