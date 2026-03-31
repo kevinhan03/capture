@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next"
 
 export const metadata: Metadata = {
-  title: "WishSnap",
+  title: "SNAPY",
   description: "나만의 AI 캡쳐 스크랩북",
 };
 
