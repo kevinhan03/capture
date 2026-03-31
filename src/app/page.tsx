@@ -742,7 +742,7 @@ export default function Home() {
                 alt="capture detail"
                 style={{
                   width: "100%",
-                  aspectRatio: "1 / 1",
+                  maxHeight: 200,
                   objectFit: "cover",
                   borderRadius: 20,
                   display: "block",
