@@ -749,11 +749,10 @@ export default function Home() {
                 src={selectedCapture.preview}
                 alt="capture detail"
                 style={{
-                  width: "100%",
-                  objectFit: "contain",
-                  borderRadius: 20,
+                  width: "70%",
                   display: "block",
-                  marginBottom: 18,
+                  margin: "0 auto 18px",
+                  borderRadius: 20,
                 }}
               />
 
