@@ -56,12 +56,20 @@ export default function Home() {
 
   // 로그인 상태 감지 및 캡쳐 목록 불러오기
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(({ data: { user }, error }) => {
+      if (error?.message?.includes("Refresh Token")) {
+        supabase.auth.signOut();
+        return;
+      }
       setUser(user);
       if (user) loadCaptures(user.id);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "TOKEN_REFRESHED" && !session) {
+        supabase.auth.signOut();
+        return;
+      }
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser) {
