@@ -267,6 +267,14 @@ export default function Home() {
     setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
+  async function deleteCapture(captureId: string) {
+    const { error } = await supabase.from("captures").delete().eq("id", captureId);
+    if (!error) {
+      setCaptures((prev) => prev.filter((c) => c.id !== captureId));
+      closeCaptureDetail();
+    }
+  }
+
   async function saveCaptureEdit() {
     if (!editingCaptureId || !editForm) return;
 
@@ -672,6 +680,7 @@ export default function Home() {
             inset: 0,
             backgroundColor: "rgba(0, 0, 0, 0.72)",
             display: "flex",
+            alignItems: "center",
             justifyContent: "center",
             zIndex: 200,
             padding: "24px 16px",
@@ -682,7 +691,7 @@ export default function Home() {
             style={{
               width: "100%",
               maxWidth: 480,
-              maxHeight: "100%",
+              maxHeight: "80vh",
               overflowY: "auto",
               backgroundColor: "#16161E",
               borderRadius: 24,
@@ -974,6 +983,18 @@ export default function Home() {
                     }}
                   >
                     수정하기
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm("이 캡쳐를 삭제할까요?")) deleteCapture(selectedCapture.id);
+                    }}
+                    style={{
+                      width: "100%", padding: "10px 16px", borderRadius: 14,
+                      border: "1px solid #FF444433", backgroundColor: "transparent",
+                      color: "#FF6666", fontSize: 12, cursor: "pointer",
+                    }}
+                  >
+                    삭제
                   </button>
                 </div>
               )}
