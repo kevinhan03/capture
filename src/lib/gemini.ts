@@ -1,27 +1,32 @@
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
-const PROMPT = `이 캡쳐 이미지에서 쇼핑 가능한 아이템의 정보를 추출해주세요. 사진에 여러 아이템이 있다면 가장 메인이 되는 아이템 하나를 골라주세요. 정보가 명확하지 않으면 이미지의 분위기나 형태를 바탕으로 자연스럽게 추론해서 채워주세요.`;
+const PROMPT = `이 이미지의 유형(패션/상품, 코디, 인테리어, 텍스트/프롬프트, 무드/영감, 음식, 기타 등)을 먼저 파악한 뒤, 각 필드를 아래 기준에 맞게 채워주세요.
+
+- brand(출처): 패션/상품이면 브랜드명, 텍스트·프롬프트 캡쳐면 출처 계정이나 매체명, 무드/영감이면 작가·채널명. 알 수 없으면 '미상'
+- itemName(핵심 내용): 패션이면 상품명, 텍스트/프롬프트면 핵심 내용 한 줄 요약, 코디/무드면 분위기·스타일 묘사, 음식이면 메뉴명
+- price(참고 정보): 가격 정보가 있으면 가격, 없으면 플랫폼이나 맥락 정보(예: 'Instagram', '블로그', 'YouTube'). 아무것도 없으면 '없음'
+- styleKeywords: 이미지를 잘 설명하는 키워드 3개`;
 
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
     brand: {
       type: "STRING",
-      description: "브랜드 이름 (알 수 없으면 '미상')",
+      description: "출처 (브랜드명, 계정명, 작가명 등. 알 수 없으면 '미상')",
     },
     itemName: {
       type: "STRING",
-      description: "상품명 또는 아이템의 짧은 묘사",
+      description: "핵심 내용 (상품명, 요약, 스타일 묘사 등)",
     },
     price: {
       type: "STRING",
-      description: "가격 정보 (알 수 없으면 '미정')",
+      description: "참고 정보 (가격, 플랫폼, 맥락 등. 없으면 '없음')",
     },
     styleKeywords: {
       type: "ARRAY",
       items: { type: "STRING" },
-      description: "스타일 키워드 3개",
+      description: "이미지를 설명하는 키워드 3개",
     },
   },
   required: ["brand", "itemName", "price", "styleKeywords"],

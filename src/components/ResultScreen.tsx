@@ -18,7 +18,7 @@ const TAGS = [
 interface Props {
   preview: string;
   result: ShoppingItem;
-  onSave: (tags: string[]) => void;
+  onSave: (tags: string[], memo: string) => void;
   onBack: () => void;
 }
 
@@ -26,6 +26,7 @@ export default function ResultScreen({ preview, result, onSave, onBack }: Props)
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showCustom, setShowCustom] = useState(false);
   const [customText, setCustomText] = useState("");
+  const [memo, setMemo] = useState("");
 
   function toggleTag(id: string) {
     if (id === "custom") {
@@ -45,7 +46,7 @@ export default function ResultScreen({ preview, result, onSave, onBack }: Props)
       (id) => TAGS.find((t) => t.id === id)?.label ?? id
     );
     if (customText.trim()) tags.push(customText.trim());
-    onSave(tags);
+    onSave(tags, memo.trim());
   }
 
   return (
@@ -126,9 +127,9 @@ export default function ResultScreen({ preview, result, onSave, onBack }: Props)
           {/* 분석 정보 */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, color: "#00D4AA", marginBottom: 4 }}>
-              AI 파싱 완료
+              AI 분석 완료
             </div>
-            {result.brand && result.brand !== "미상" && (
+            {result.brand && result.brand !== "미상" && result.brand !== "" && (
               <div style={{ fontSize: 12, color: "#888888", marginBottom: 2 }}>
                 {result.brand}
               </div>
@@ -148,7 +149,7 @@ export default function ResultScreen({ preview, result, onSave, onBack }: Props)
             >
               {result.itemName}
             </div>
-            {result.price && result.price !== "미정" && (
+            {result.price && result.price !== "없음" && (
               <div style={{ fontSize: 13, color: "#00D4AA", marginBottom: 6 }}>
                 {result.price}
               </div>
@@ -253,6 +254,46 @@ export default function ResultScreen({ preview, result, onSave, onBack }: Props)
               }}
             />
           )}
+        </div>
+
+        {/* 메모 */}
+        <div style={{ marginBottom: 24 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 12,
+            }}
+          >
+            <span style={{ fontSize: 16, color: "#AAAAAA" }}>✎</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#FFFFFF" }}>
+              메모
+            </span>
+            <span style={{ fontSize: 12, color: "#555555" }}>(선택)</span>
+          </div>
+          <textarea
+            placeholder="기억해두고 싶은 내용을 적어보세요"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            rows={3}
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 10,
+              backgroundColor: "#1E1E2A",
+              border: "1px solid #2D2D3A",
+              color: "#FFFFFF",
+              fontSize: 14,
+              outline: "none",
+              resize: "none",
+              boxSizing: "border-box",
+              lineHeight: 1.6,
+              fontFamily: "inherit",
+            }}
+            onFocus={(e) => { e.target.style.borderColor = "#00D4AA55"; }}
+            onBlur={(e) => { e.target.style.borderColor = "#2D2D3A"; }}
+          />
         </div>
       </div>
 

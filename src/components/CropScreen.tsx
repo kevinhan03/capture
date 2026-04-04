@@ -22,13 +22,14 @@ interface Props {
   dataUrl: string;
   mimeType: string;
   onComplete: (croppedDataUrl: string) => void;
+  onSkip: (croppedDataUrl: string) => void;
   onBack: () => void;
 }
 
 const HANDLE = 22;
 const MIN_SIZE = 60;
 
-export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Props) {
+export default function CropScreen({ dataUrl, mimeType, onComplete, onSkip, onBack }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -120,8 +121,8 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
     dragRef.current = null;
   }, []);
 
-  function handleComplete() {
-    if (!containerRef.current || !imgRef.current) return;
+  function getCroppedDataUrl(): string | null {
+    if (!containerRef.current || !imgRef.current) return null;
 
     const img = imgRef.current;
     const cw = containerRef.current.offsetWidth;
@@ -129,7 +130,6 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
     const naturalW = img.naturalWidth;
     const naturalH = img.naturalHeight;
 
-    // object-fit: contain 기준으로 실제 이미지 렌더링 위치 계산
     const containerAspect = cw / ch;
     const imgAspect = naturalW / naturalH;
 
@@ -160,7 +160,17 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
     const ctx = canvas.getContext("2d")!;
     ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-    onComplete(canvas.toDataURL(mimeType));
+    return canvas.toDataURL(mimeType);
+  }
+
+  function handleComplete() {
+    const url = getCroppedDataUrl();
+    if (url) onComplete(url);
+  }
+
+  function handleSkip() {
+    const url = getCroppedDataUrl();
+    if (url) onSkip(url);
   }
 
   return (
@@ -183,20 +193,21 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
       <style>{`
         .crop-header { display: flex; align-items: center; padding: 16px 20px; gap: 12px; flex-shrink: 0; }
         .crop-subtitle { text-align: center; padding: 0 20px; color: #888888; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0; }
-        .crop-btn-area { flex-shrink: 0; padding: 0 20px max(24px, env(safe-area-inset-bottom)); }
-        .crop-btn-area button { width: 100%; padding: 15px 0; border-radius: 14px; background-color: #2D2D3A; border: none; color: #00D4AA; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .crop-btn-area { flex-shrink: 0; padding: 0 20px max(24px, env(safe-area-inset-bottom)); display: flex; gap: 10px; }
+        .crop-btn-ai { flex: 1.6; padding: 15px 8px; border-radius: 14px; background: linear-gradient(135deg, #00D4AA 0%, #0099CC 100%); border: none; color: #000000; font-size: 15px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 12px rgba(0,212,170,0.35); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .crop-btn-skip { flex: 1; padding: 15px 8px; border-radius: 14px; background-color: #2D2D3A; border: none; color: #AAAAAA; font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 
         @media (max-height: 700px) {
           .crop-header { padding: 10px 20px; }
           .crop-subtitle { padding: 0 20px; font-size: 12px; }
           .crop-btn-area { padding: 0 20px max(16px, env(safe-area-inset-bottom)); }
-          .crop-btn-area button { padding: 12px 0; font-size: 14px; }
+          .crop-btn-ai, .crop-btn-skip { padding: 12px 8px; font-size: 14px; }
         }
         @media (max-height: 580px) {
           .crop-header { padding: 8px 20px; }
           .crop-subtitle { padding: 0 20px; font-size: 11px; }
           .crop-btn-area { padding: 0 20px max(10px, env(safe-area-inset-bottom)); }
-          .crop-btn-area button { padding: 10px 0; font-size: 13px; border-radius: 12px; }
+          .crop-btn-ai, .crop-btn-skip { padding: 10px 8px; font-size: 13px; border-radius: 12px; }
         }
       `}</style>
 
@@ -408,7 +419,8 @@ export default function CropScreen({ dataUrl, mimeType, onComplete, onBack }: Pr
 
       {/* 하단 버튼 */}
       <div className="crop-btn-area">
-        <button onClick={handleComplete}>분석하기</button>
+        <button className="crop-btn-skip" onClick={handleSkip}>NO 분석</button>
+        <button className="crop-btn-ai" onClick={handleComplete}>✦ AI로 분석하기</button>
       </div>
     </div>
   );

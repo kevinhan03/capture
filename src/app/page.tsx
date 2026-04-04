@@ -8,14 +8,19 @@ import type { ShoppingItem } from "@/lib/gemini";
 import { createClient } from "@/lib/supabase";
 import CropScreen from "@/components/CropScreen";
 import ResultScreen from "@/components/ResultScreen";
+import OnboardingOverlay from "@/components/OnboardingOverlay";
 
 interface CaptureItem {
   id: string;
   preview: string;
   result: ShoppingItem;
   tags: string[];
+  memo: string;
   purchaseUrl: string;
   relatedUrl: string;
+  createdAt: string;
+  isPublic: boolean;
+  shareToken: string | null;
 }
 
 interface CropState {
@@ -34,6 +39,7 @@ interface EditFormState {
   price: string;
   styleKeywords: string;
   tags: string;
+  memo: string;
   purchaseUrl: string;
   relatedUrl: string;
 }
@@ -51,6 +57,12 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [dbLoading, setDbLoading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("전체");
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name_asc">("newest");
+  const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const supabase = createClient();
@@ -104,8 +116,12 @@ export default function Home() {
             styleKeywords: row.style_keywords ?? [],
           },
           tags: row.tags ?? [],
+          memo: row.memo ?? "",
           purchaseUrl: row.purchase_url,
           relatedUrl: row.related_url,
+          createdAt: row.created_at,
+          isPublic: row.is_public ?? false,
+          shareToken: row.share_token ?? null,
         }))
       );
     }
@@ -160,7 +176,15 @@ export default function Home() {
     analyze(croppedDataUrl, mimeType);
   }
 
-  async function handleSave(tags: string[]) {
+  function handleCropSkip(croppedDataUrl: string) {
+    setCropState(null);
+    setResultState({
+      preview: croppedDataUrl,
+      result: { brand: "미상", itemName: "", price: "없음", styleKeywords: [] },
+    });
+  }
+
+  async function handleSave(tags: string[], memo: string) {
     if (!resultState) return;
 
     if (!user) {
@@ -206,8 +230,11 @@ export default function Home() {
           price: resultState.result.price,
           style_keywords: resultState.result.styleKeywords,
           tags,
+          memo,
           purchase_url: "",
           related_url: "",
+          is_public: false,
+          share_token: null,
         })
         .select()
         .single();
@@ -225,8 +252,12 @@ export default function Home() {
             styleKeywords: data.style_keywords ?? [],
           },
           tags: data.tags ?? [],
+          memo: data.memo ?? "",
           purchaseUrl: data.purchase_url,
           relatedUrl: data.related_url,
+          createdAt: data.created_at,
+          isPublic: data.is_public ?? false,
+          shareToken: data.share_token ?? null,
         },
         ...prev,
       ]);
@@ -267,6 +298,7 @@ export default function Home() {
       price: capture.result.price,
       styleKeywords: capture.result.styleKeywords.join(", "),
       tags: capture.tags.join(", "),
+      memo: capture.memo,
       purchaseUrl: capture.purchaseUrl,
       relatedUrl: capture.relatedUrl,
     });
@@ -290,9 +322,10 @@ export default function Home() {
     const updated = {
       brand: editForm.brand.trim() || "미상",
       item_name: editForm.itemName.trim(),
-      price: editForm.price.trim() || "미정",
+      price: editForm.price.trim() || "없음",
       style_keywords: normalizeListInput(editForm.styleKeywords),
       tags: normalizeListInput(editForm.tags),
+      memo: editForm.memo,
       purchase_url: editForm.purchaseUrl.trim(),
       related_url: editForm.relatedUrl.trim(),
     };
@@ -316,6 +349,7 @@ export default function Home() {
                   styleKeywords: updated.style_keywords,
                 },
                 tags: updated.tags,
+                memo: updated.memo,
                 purchaseUrl: updated.purchase_url,
                 relatedUrl: updated.related_url,
               }
@@ -328,6 +362,31 @@ export default function Home() {
     setEditForm(null);
   }
 
+  async function handleShareCapture(capture: CaptureItem) {
+    let token = capture.shareToken;
+
+    if (!token) {
+      token = crypto.randomUUID();
+      const { error } = await supabase
+        .from("captures")
+        .update({ is_public: true, share_token: token })
+        .eq("id", capture.id);
+
+      if (error) { setError("공유 링크 생성 실패"); return; }
+
+      setCaptures((prev) =>
+        prev.map((c) =>
+          c.id === capture.id ? { ...c, isPublic: true, shareToken: token } : c
+        )
+      );
+    }
+
+    const url = `${window.location.origin}/share/${token}`;
+    await navigator.clipboard.writeText(url);
+    setCopiedShareId(capture.id);
+    setTimeout(() => setCopiedShareId(null), 2500);
+  }
+
   // 크롭 화면
   if (cropState) {
     return (
@@ -335,6 +394,7 @@ export default function Home() {
         dataUrl={cropState.dataUrl}
         mimeType={cropState.mimeType}
         onComplete={handleCropComplete}
+        onSkip={handleCropSkip}
         onBack={() => setCropState(null)}
       />
     );
@@ -352,13 +412,32 @@ export default function Home() {
     );
   }
 
+  const KNOWN_TAGS = ["살까말까","코디 영감","선물용","인테리어","할인 대기","컬러 참고","핏/사이즈","브랜드 기억"];
+  const categoryFiltered = selectedCategory === "전체"
+    ? captures
+    : selectedCategory === "기타"
+      ? captures.filter((c) => c.tags.some((tag) => !KNOWN_TAGS.includes(tag)))
+      : captures.filter((c) => c.tags.includes(selectedCategory));
+
+  const q = searchQuery.trim().toLowerCase();
+  const searchFiltered = q
+    ? categoryFiltered.filter((c) =>
+        c.result.itemName.toLowerCase().includes(q) ||
+        c.result.brand.toLowerCase().includes(q) ||
+        c.result.price.toLowerCase().includes(q) ||
+        c.tags.some((t) => t.toLowerCase().includes(q)) ||
+        c.result.styleKeywords.some((kw) => kw.toLowerCase().includes(q))
+      )
+    : categoryFiltered;
+
+  const filteredCaptures = [...searchFiltered].sort((a, b) => {
+    if (sortOrder === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    if (sortOrder === "name_asc") return a.result.itemName.localeCompare(b.result.itemName, "ko");
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // newest
+  });
+
   const selectedCapture =
     selectedCaptureId ? captures.find((capture) => capture.id === selectedCaptureId) ?? null : null;
-  const naverShoppingUrl = selectedCapture
-    ? `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(
-        `${selectedCapture.result.brand !== "미상" ? `${selectedCapture.result.brand} ` : ""}${selectedCapture.result.itemName}`
-      )}`
-    : "";
 
   return (
     <div
@@ -371,6 +450,7 @@ export default function Home() {
         flexDirection: "column",
       }}
     >
+      <OnboardingOverlay />
       {/* 상단 네비게이션 바 */}
       <header
         style={{
@@ -434,12 +514,20 @@ export default function Home() {
             </Link>
           )}
           <button
+            onClick={() => {
+              setShowSearch((v) => {
+                if (v) setSearchQuery("");
+                setTimeout(() => searchInputRef.current?.focus(), 50);
+                return !v;
+              });
+            }}
             style={{
               width: 40, height: 40, borderRadius: 12,
-              backgroundColor: "#2D2D3A", border: "none",
+              backgroundColor: showSearch ? "#00D4AA" : "#2D2D3A", border: "none",
               cursor: "pointer", display: "flex",
               alignItems: "center", justifyContent: "center",
-              color: "#FFFFFF", fontSize: 16,
+              color: showSearch ? "#000000" : "#FFFFFF", fontSize: 16,
+              transition: "all 0.15s ease",
             }}
           >
             🔍
@@ -475,6 +563,52 @@ export default function Home() {
         style={{ display: "none" }}
         onChange={handleInputChange}
       />
+
+      {/* 검색 바 */}
+      {showSearch && (
+        <div style={{ padding: "0 20px 14px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              backgroundColor: "#1E1E2A",
+              borderRadius: 14,
+              padding: "10px 14px",
+              border: "1px solid #00D4AA55",
+            }}
+          >
+            <span style={{ fontSize: 15, flexShrink: 0 }}>🔍</span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="내용, 출처, 태그로 검색..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                flex: 1,
+                background: "none",
+                border: "none",
+                outline: "none",
+                color: "#FFFFFF",
+                fontSize: 14,
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                style={{
+                  background: "none", border: "none",
+                  color: "#666666", cursor: "pointer",
+                  fontSize: 18, padding: 0, flexShrink: 0,
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 로딩 */}
       {(loading || dbLoading) && (
@@ -512,20 +646,130 @@ export default function Home() {
             borderLeft: "3px solid #FF4444",
             fontSize: 13,
             color: "#FF6666",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
           }}
         >
-          {error}
+          <span style={{ flex: 1 }}>
+            {error}
+            {error.includes("로그인") && (
+              <Link
+                href="/auth"
+                style={{
+                  marginLeft: 8,
+                  color: "#FF9999",
+                  fontWeight: 700,
+                  textDecoration: "underline",
+                }}
+              >
+                로그인하기 →
+              </Link>
+            )}
+          </span>
           <button
             onClick={() => setError(null)}
-            style={{ marginLeft: 8, background: "none", border: "none", color: "#FF6666", cursor: "pointer", fontSize: 16 }}
+            style={{ background: "none", border: "none", color: "#FF6666", cursor: "pointer", fontSize: 16, flexShrink: 0 }}
           >
             ×
           </button>
         </div>
       )}
 
-      {/* 비로그인 안내 */}
-      {!user && !dbLoading && (
+      {/* 카테고리 필터 바 */}
+      {captures.length > 0 && (() => {
+        const TAG_META: { label: string; icon: string }[] = [
+          { label: "살까말까", icon: "🛍️" },
+          { label: "코디 영감", icon: "✨" },
+          { label: "선물용",   icon: "🎁" },
+          { label: "인테리어", icon: "🏠" },
+          { label: "할인 대기", icon: "⏰" },
+          { label: "컬러 참고", icon: "🎨" },
+          { label: "핏/사이즈", icon: "🏷️" },
+          { label: "브랜드 기억", icon: "🔖" },
+        ];
+        const existingLabels = new Set(captures.flatMap((c) => c.tags));
+        const visibleTags = TAG_META.filter((t) => existingLabels.has(t.label));
+        const hasCustom = captures.some((c) =>
+          c.tags.some((tag) => !TAG_META.map((t) => t.label).includes(tag))
+        );
+        if (hasCustom) visibleTags.push({ label: "기타", icon: "✏️" });
+
+        return (
+          <div
+            style={{
+              overflowX: "auto",
+              padding: "0 20px 12px",
+              display: "flex",
+              gap: 8,
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+            }}
+          >
+            {[{ label: "전체", icon: "✦" }, ...visibleTags].map(({ label, icon }) => {
+              const isActive = selectedCategory === label;
+              return (
+                <button
+                  key={label}
+                  onClick={() => setSelectedCategory(label)}
+                  style={{
+                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "8px 14px",
+                    borderRadius: 20,
+                    backgroundColor: isActive ? "#00D4AA" : "#2D2D3A",
+                    border: "none",
+                    color: isActive ? "#000000" : "#AAAAAA",
+                    fontSize: 13,
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>{icon}</span>
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* 정렬 UI */}
+      {captures.length > 0 && (
+        <div style={{ padding: "0 20px 10px", display: "flex", gap: 6 }}>
+          {(["newest", "oldest", "name_asc"] as const).map((order) => {
+            const labels = { newest: "최신순", oldest: "오래된순", name_asc: "이름순" };
+            const isActive = sortOrder === order;
+            return (
+              <button
+                key={order}
+                onClick={() => setSortOrder(order)}
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: 20,
+                  border: `1px solid ${isActive ? "#00D4AA" : "#2D2D3A"}`,
+                  backgroundColor: isActive ? "#1E2D2A" : "transparent",
+                  color: isActive ? "#00D4AA" : "#666666",
+                  fontSize: 12,
+                  fontWeight: isActive ? 600 : 400,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {labels[order]}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 비로그인 안내 — 에러 메시지가 없을 때만 표시 */}
+      {!user && !dbLoading && !error && (
         <div
           style={{
             margin: "0 20px 12px",
@@ -574,6 +818,22 @@ export default function Home() {
               </p>
             </div>
           </div>
+        ) : filteredCaptures.length === 0 ? (
+          /* 필터 결과 없음 */
+          <div
+            style={{
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              minHeight: "calc(100vh - 280px)", gap: 12,
+            }}
+          >
+            <div style={{ fontSize: 36 }}>{q ? "😶" : "🔍"}</div>
+            <p style={{ margin: 0, fontSize: 14, color: "#666666", textAlign: "center" }}>
+              {q
+                ? `"${searchQuery}"에 해당하는 캡쳐가 없어요.`
+                : `'${selectedCategory}' 카테고리에 저장된 캡쳐가 없어요.`}
+            </p>
+          </div>
         ) : (
           /* 캡쳐 목록 */
           <div
@@ -583,7 +843,7 @@ export default function Home() {
               gap: 12,
             }}
           >
-            {captures.map((capture) => (
+            {filteredCaptures.map((capture) => (
               <button
                 key={capture.id}
                 onClick={() => openCaptureDetail(capture.id)}
@@ -637,7 +897,7 @@ export default function Home() {
                       {capture.result.brand}
                     </div>
                   )}
-                  {capture.result.price && capture.result.price !== "미정" && (
+                  {capture.result.price && capture.result.price !== "없음" && (
                     <div style={{ fontSize: 12, color: "#CCCCCC", marginBottom: 8 }}>
                       {capture.result.price}
                     </div>
@@ -658,7 +918,7 @@ export default function Home() {
                     </div>
                   )}
                   {capture.tags?.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: capture.memo ? 8 : 0 }}>
                       {capture.tags.map((tag, i) => (
                         <span
                           key={i}
@@ -673,6 +933,33 @@ export default function Home() {
                           {tag}
                         </span>
                       ))}
+                    </div>
+                  )}
+                  {capture.memo && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 5,
+                        backgroundColor: "#16161E",
+                        borderRadius: 8,
+                        padding: "6px 8px",
+                      }}
+                    >
+                      <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1 }}>✎</span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#888888",
+                          lineHeight: 1.4,
+                          overflow: "hidden",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                      >
+                        {capture.memo}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -762,7 +1049,7 @@ export default function Home() {
               {editingCaptureId === selectedCapture.id && editForm ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 12, color: "#AAB1C3" }}>브랜드</span>
+                    <span style={{ fontSize: 12, color: "#AAB1C3" }}>출처</span>
                     <input
                       value={editForm.brand}
                       onChange={(e) => handleEditFieldChange("brand", e.target.value)}
@@ -774,7 +1061,7 @@ export default function Home() {
                     />
                   </label>
                   <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 12, color: "#AAB1C3" }}>상품명</span>
+                    <span style={{ fontSize: 12, color: "#AAB1C3" }}>핵심 내용</span>
                     <input
                       value={editForm.itemName}
                       onChange={(e) => handleEditFieldChange("itemName", e.target.value)}
@@ -786,7 +1073,7 @@ export default function Home() {
                     />
                   </label>
                   <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 12, color: "#AAB1C3" }}>가격</span>
+                    <span style={{ fontSize: 12, color: "#AAB1C3" }}>참고 정보</span>
                     <input
                       value={editForm.price}
                       onChange={(e) => handleEditFieldChange("price", e.target.value)}
@@ -820,6 +1107,21 @@ export default function Home() {
                         padding: "12px 14px", borderRadius: 12,
                         border: "1px solid #2D2D3A", backgroundColor: "#1E1E2A",
                         color: "#FFFFFF", fontSize: 14, outline: "none",
+                      }}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontSize: 12, color: "#AAB1C3" }}>메모</span>
+                    <textarea
+                      value={editForm.memo}
+                      onChange={(e) => handleEditFieldChange("memo", e.target.value)}
+                      placeholder="기억해두고 싶은 내용을 적어보세요"
+                      rows={3}
+                      style={{
+                        padding: "12px 14px", borderRadius: 12,
+                        border: "1px solid #2D2D3A", backgroundColor: "#1E1E2A",
+                        color: "#FFFFFF", fontSize: 14, outline: "none",
+                        resize: "none", fontFamily: "inherit", lineHeight: 1.6,
                       }}
                     />
                   </label>
@@ -882,7 +1184,7 @@ export default function Home() {
                       backgroundColor: "#1E1E2A", border: "1px solid #2D2D3A",
                     }}
                   >
-                    <div style={{ fontSize: 12, color: "#7F8797", marginBottom: 6 }}>브랜드</div>
+                    <div style={{ fontSize: 12, color: "#7F8797", marginBottom: 6 }}>출처</div>
                     <div style={{ fontSize: 15, color: "#FFFFFF", fontWeight: 600 }}>
                       {selectedCapture.result.brand}
                     </div>
@@ -893,14 +1195,24 @@ export default function Home() {
                       backgroundColor: "#1E1E2A", border: "1px solid #2D2D3A",
                     }}
                   >
-                    <div style={{ fontSize: 12, color: "#7F8797", marginBottom: 6 }}>상품명</div>
+                    <div style={{ fontSize: 12, color: "#7F8797", marginBottom: 6 }}>핵심 내용</div>
                     <div style={{ fontSize: 16, color: "#FFFFFF", fontWeight: 700, lineHeight: 1.4 }}>
                       {selectedCapture.result.itemName}
                     </div>
-                    <div style={{ fontSize: 14, color: "#CDD3DF", marginTop: 10 }}>
-                      {selectedCapture.result.price}
-                    </div>
                   </div>
+                  {selectedCapture.result.price && selectedCapture.result.price !== "없음" && (
+                    <div
+                      style={{
+                        padding: 16, borderRadius: 18,
+                        backgroundColor: "#1E1E2A", border: "1px solid #2D2D3A",
+                      }}
+                    >
+                      <div style={{ fontSize: 12, color: "#7F8797", marginBottom: 6 }}>참고 정보</div>
+                      <div style={{ fontSize: 15, color: "#CDD3DF" }}>
+                        {selectedCapture.result.price}
+                      </div>
+                    </div>
+                  )}
 
                   {selectedCapture.result.styleKeywords.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -935,54 +1247,69 @@ export default function Home() {
                     </div>
                   )}
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {selectedCapture.purchaseUrl && (
-                      <a
-                        href={selectedCapture.purchaseUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          display: "block", textDecoration: "none", textAlign: "center",
-                          padding: "14px 16px", borderRadius: 14,
-                          background: "linear-gradient(135deg, #00D4AA 0%, #0099CC 100%)",
-                          color: "#FFFFFF", fontWeight: 700,
-                        }}
-                      >
-                        구매 링크 열기
-                      </a>
-                    )}
+                  {selectedCapture.memo && (
+                    <div
+                      style={{
+                        padding: 16, borderRadius: 18,
+                        backgroundColor: "#1E1E2A", border: "1px solid #2D2D3A",
+                      }}
+                    >
+                      <div style={{ fontSize: 12, color: "#7F8797", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                        <span>✎</span><span>메모</span>
+                      </div>
+                      <div style={{ fontSize: 14, color: "#CCCCCC", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                        {selectedCapture.memo}
+                      </div>
+                    </div>
+                  )}
 
-                    {selectedCapture.relatedUrl && (
-                      <a
-                        href={selectedCapture.relatedUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          display: "block", textDecoration: "none", textAlign: "center",
-                          padding: "14px 16px", borderRadius: 14,
-                          backgroundColor: "#2D2D3A", color: "#FFFFFF", fontWeight: 600,
-                        }}
-                      >
-                        관련 링크 열기
-                      </a>
-                    )}
+                  {(selectedCapture.purchaseUrl || selectedCapture.relatedUrl) && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {selectedCapture.purchaseUrl && (
+                        <a
+                          href={selectedCapture.purchaseUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: "block", textDecoration: "none", textAlign: "center",
+                            padding: "14px 16px", borderRadius: 14,
+                            background: "linear-gradient(135deg, #00D4AA 0%, #0099CC 100%)",
+                            color: "#FFFFFF", fontWeight: 700,
+                          }}
+                        >
+                          구매 링크 열기
+                        </a>
+                      )}
+                      {selectedCapture.relatedUrl && (
+                        <a
+                          href={selectedCapture.relatedUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: "block", textDecoration: "none", textAlign: "center",
+                            padding: "14px 16px", borderRadius: 14,
+                            backgroundColor: "#2D2D3A", color: "#FFFFFF", fontWeight: 600,
+                          }}
+                        >
+                          관련 링크 열기
+                        </a>
+                      )}
+                    </div>
+                  )}
 
-                    {!selectedCapture.purchaseUrl && !selectedCapture.relatedUrl && (
-                      <a
-                        href={naverShoppingUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          display: "block", textDecoration: "none", textAlign: "center",
-                          padding: "14px 16px", borderRadius: 14,
-                          backgroundColor: "#03C75A", color: "#FFFFFF", fontWeight: 700,
-                        }}
-                      >
-                        네이버 쇼핑에서 구매처 찾기
-                      </a>
-                    )}
-                  </div>
-
+                  <button
+                    onClick={() => handleShareCapture(selectedCapture)}
+                    style={{
+                      width: "100%", padding: "15px 16px", borderRadius: 14,
+                      border: "1px solid #2D2D3A",
+                      backgroundColor: copiedShareId === selectedCapture.id ? "#1E2D2A" : "#2D2D3A",
+                      color: copiedShareId === selectedCapture.id ? "#00D4AA" : "#FFFFFF",
+                      fontWeight: 600, cursor: "pointer",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    {copiedShareId === selectedCapture.id ? "✓ 링크 복사됨!" : "🔗 공유 링크 복사"}
+                  </button>
                   <button
                     onClick={() => startEditingCapture(selectedCapture)}
                     style={{
